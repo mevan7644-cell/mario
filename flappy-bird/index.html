@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Flappy Skies</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#fff;background:#14283d}
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;background:radial-gradient(circle at 50% 25%,#355d78,#102235)}
+.wrap{width:min(100vw,460px);padding:12px;text-align:center}
+h1{font-size:clamp(24px,6vw,35px);margin:0 0 10px;color:#ffe070;text-shadow:0 3px #8e5a30;letter-spacing:1px}
+.stage{position:relative;width:100%;aspect-ratio:3/4;max-height:76dvh;overflow:hidden;border:4px solid #f6e9af;border-radius:18px;box-shadow:0 14px 40px #091a2faa;touch-action:none;background:#77d8ed}
+canvas{display:block;width:100%;height:100%}
+.hud{position:absolute;top:15px;left:0;width:100%;display:flex;justify-content:space-between;padding:0 18px;pointer-events:none;font-weight:900;text-shadow:0 2px 3px #1d526d;font-size:19px}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:#102a4180;padding:20px}
+.panel{background:#fff9e3;color:#244357;border:3px solid #e5b964;border-radius:18px;padding:22px 18px;width:min(100%,290px);box-shadow:0 8px #93653a55}
+.panel h2{margin:0 0 7px;font-size:29px}.panel p{margin:7px 0 17px;line-height:1.4}
+button{background:#f6b43d;border:0;border-bottom:5px solid #be772e;color:#352d23;border-radius:12px;padding:12px 28px;font-weight:900;font-size:19px;cursor:pointer}button:active{transform:translateY(3px);border-bottom-width:2px}
+.note{opacity:.85;font-size:13px;margin:12px 0 0}.hide{display:none}
+</style>
+</head>
+<body>
+<main class="wrap">
+<h1>🐤 Flappy Skies</h1>
+<div class="stage" id="stage">
+<canvas id="game" width="420" height="560" aria-label="Flying bird game"></canvas>
+<div class="hud"><span id="score">Score: 0</span><span id="best">Best: 0</span></div>
+<div class="overlay" id="overlay"><div class="panel"><h2 id="headline">Ready to fly?</h2><p id="message">Fly through the gaps. Avoid the pipes and the ground!</p><button id="play">Start game</button></div></div>
+</div>
+<p class="note">Tap, click, or press Space / ↑ to flap · P to pause</p>
+</main>
+<script>
+(()=>{
+"use strict";
+const c=document.getElementById("game"),ctx=c.getContext("2d"),stage=document.getElementById("stage");
+const scoreEl=document.getElementById("score"),bestEl=document.getElementById("best");
+const overlay=document.getElementById("overlay"),headline=document.getElementById("headline"),message=document.getElementById("message"),play=document.getElementById("play");
+const W=420,H=560,GROUND=510,PIPE_W=68,GAP=155,BIRD_X=105,R=15;
+let best=0;try{best=Number(localStorage.getItem("flappy-skies-best"))||0}catch(e){}
+bestEl.textContent="Best: "+best;
+let bird,pipes,score,state="ready",spawn,scroll,last=0,anim=0;
+const rand=(a,b)=>a+Math.random()*(b-a);
+function reset(){bird={y:230,vy:0,tilt:0};pipes=[];score=0;spawn=0;scroll=0;scoreEl.textContent="Score: 0"}
+function start(){reset();state="playing";overlay.classList.add("hide");flap()}
+function flap(){if(state==="playing"){bird.vy=-5.8}else if(state==="ready"||state==="over"){start()}}
+function end(){if(state!=="playing")return;state="over";if(score>best){best=score;try{localStorage.setItem("flappy-skies-best",String(best))}catch(e){}}bestEl.textContent="Best: "+best;headline.textContent="Game over!";message.textContent="Score: "+score+" · Best: "+best;play.textContent="Play again";overlay.classList.remove("hide")}
+function pause(){if(state==="playing"){state="paused";headline.textContent="Paused";message.textContent="Take a breather.";play.textContent="Resume";overlay.classList.remove("hide")}else if(state==="paused"){state="playing";overlay.classList.add("hide")}}
+play.addEventListener("click",e=>{e.stopPropagation();if(state==="paused")pause();else start()});
+stage.addEventListener("pointerdown",e=>{if(e.target===play||play.contains(e.target))return;if(state==="paused")return;flap()});
+window.addEventListener("keydown",e=>{if(["Space","ArrowUp"].includes(e.code)){e.preventDefault();if(!e.repeat)flap()}else if(e.code==="KeyP")pause()});
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&state==="playing")pause()});
+function update(dt){
+if(state!=="playing")return;
+const step=dt/16.6667;
+scroll=(scroll+2.15*step)%24;
+bird.vy+=.32*step;bird.y+=bird.vy*step;bird.tilt=Math.max(-.55,Math.min(1.15,bird.vy*.1));
+spawn+=dt;
+if(spawn>1450){spawn-=1450;pipes.push({x:W+5,top:rand(85,GROUND-GAP-85),scored:false})}
+for(const p of pipes){
+p.x-=2.15*step;
+if(!p.scored&&p.x+PIPE_W<BIRD_X){p.scored=true;score++;scoreEl.textContent="Score: "+score}
+if(BIRD_X+R-4>p.x&&BIRD_X-R+4<p.x+PIPE_W&&(bird.y-R+4<p.top||bird.y+R-4>p.top+GAP))end()
+}
+pipes=pipes.filter(p=>p.x+PIPE_W>-10);
+if(bird.y+R>=GROUND||bird.y-R<=0)end();
+}
+function cloud(x,y,s){ctx.fillStyle="#ffffffa8";ctx.beginPath();ctx.ellipse(x,y,28*s,12*s,0,0,7);ctx.ellipse(x-17*s,y+3*s,19*s,10*s,0,0,7);ctx.ellipse(x+18*s,y+2*s,20*s,10*s,0,0,7);ctx.fill()}
+function pipe(x,y,h,top){if(h<=0)return;ctx.fillStyle="#397b35";ctx.fillRect(x-3,y,PIPE_W+6,h);ctx.fillStyle="#68c852";ctx.fillRect(x+3,y,PIPE_W-6,h);ctx.fillStyle="#9ee778";ctx.fillRect(x+10,y,12,h);ctx.fillStyle="#276d34";ctx.fillRect(x+PIPE_W-13,y,9,h);let capY=top?y+h-24:y;ctx.fillStyle="#357e37";ctx.fillRect(x-8,capY,PIPE_W+16,24);ctx.fillStyle="#7bd65a";ctx.fillRect(x-4,capY+3,PIPE_W+8,17);ctx.fillStyle="#b0ec81";ctx.fillRect(x+4,capY+4,10,15)}
+function draw(){
+const sky=ctx.createLinearGradient(0,0,0,GROUND);sky.addColorStop(0,"#64c4ed");sky.addColorStop(1,"#b9eff0");ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+cloud(85-(scroll*2)%80,105,1.1);cloud(310-(scroll)%45,180,.8);cloud(230,58,.6);
+ctx.fillStyle="#89cba2";for(let i=0;i<7;i++){const x=i*90-(scroll*1.3)%90;ctx.beginPath();ctx.arc(x+15,GROUND+10,54,Math.PI,0);ctx.fill()}
+for(const p of pipes){pipe(p.x,0,p.top,true);pipe(p.x,p.top+GAP,GROUND-p.top-GAP,false)}
+ctx.fillStyle="#80c74d";ctx.fillRect(0,GROUND,W,11);ctx.fillStyle="#e1ba76";ctx.fillRect(0,GROUND+11,W,H-GROUND-11);ctx.fillStyle="#bd965e";for(let x=-24+scroll;x<W;x+=24)ctx.fillRect(x,GROUND+21,13,4);
+ctx.save();ctx.translate(BIRD_X,bird.y);ctx.rotate(bird.tilt);
+ctx.fillStyle="#e5a32c";ctx.beginPath();ctx.ellipse(0,2,17,14,0,0,7);ctx.fill();
+ctx.fillStyle="#ffde52";ctx.beginPath();ctx.ellipse(-2,-2,16,14,0,0,7);ctx.fill();
+ctx.fillStyle="#f5b431";ctx.beginPath();ctx.ellipse(-7,5,9,7,-.4,0,7);ctx.fill();
+ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(7,-7,6,0,7);ctx.fill();ctx.fillStyle="#263647";ctx.beginPath();ctx.arc(9,-6,2.8,0,7);ctx.fill();
+ctx.fillStyle="#f08231";ctx.beginPath();ctx.moveTo(13,0);ctx.lineTo(28,5);ctx.lineTo(13,10);ctx.closePath();ctx.fill();ctx.restore();
+}
+function frame(t){const dt=Math.min(t-last||16.67,35);last=t;update(dt);draw();anim=requestAnimationFrame(frame)}
+reset();anim=requestAnimationFrame(frame);
+})();
+</script>
+</body></html>
